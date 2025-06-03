@@ -77,3 +77,27 @@ if watchlist:
 else:
     st.info("Pilih minimal satu saham untuk menampilkan watchlist.")
 
+# 🔥 Heatmap Volume Spike
+st.subheader("🔥 Heatmap Volume Spike (Volume vs Rata-rata)")
+
+# Hitung rata-rata volume per saham
+avg_volume_per_stock = df.groupby("Stock Code")["Volume"].mean().reset_index()
+avg_volume_per_stock.columns = ["Stock Code", "Avg Volume"]
+
+# Gabungkan dengan data asli
+df_spike = pd.merge(df, avg_volume_per_stock, on="Stock Code")
+df_spike["Volume Spike Ratio"] = df_spike["Volume"] / df_spike["Avg Volume"]
+
+# Ambil top 20 saham dengan rasio spike tertinggi
+spike_top = df_spike.sort_values(by="Volume Spike Ratio", ascending=False).dropna().head(20)
+
+fig_spike = px.density_heatmap(
+    spike_top,
+    x="Stock Code",
+    y="Volume Spike Ratio",
+    z="Volume",
+    color_continuous_scale="Inferno",
+    title="Top 20 Saham dengan Volume Spike",
+)
+
+st.plotly_chart(fig_spike, use_container_width=True)
