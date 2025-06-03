@@ -31,11 +31,10 @@ st.title("📊 Dashboard Analisa Big Player (Bandarmologi)")
 st.subheader("🧠 Top 10 Saham Net Buy Asing")
 top_foreign = df.sort_values(by="Net Foreign", ascending=False).head(10)
 st.dataframe(top_foreign[["Stock Code", "Company Name", "Net Foreign", "Volume", "Close"]])
-
 fig1 = px.bar(top_foreign, x="Stock Code", y="Net Foreign", title="Top Net Foreign Buy")
 st.plotly_chart(fig1, use_container_width=True)
 
-# Filter Akumulasi: volume tinggi tapi harga stagnan
+# Filter Akumulasi
 st.subheader("🔍 Deteksi Akumulasi (Volume Naik, Harga Sideways)")
 df["Price Change %"] = (df["Close"] - df["Open Price"]) / df["Open Price"] * 100
 accumulated = df[(df["Volume"] > df["Volume"].median()) & (df["Price Change %"].abs() < 2)]
@@ -46,58 +45,48 @@ st.subheader("📦 Saham dengan Transaksi Non-Regular")
 non_reg = df[df["Non Regular Volume"] > 0]
 st.dataframe(non_reg[["Stock Code", "Non Regular Volume", "Non Regular Value"]].sort_values(by="Non Regular Value", ascending=False).head(10))
 
-# VWAP Chart
+# VWAP & RSI
 st.subheader("📈 VWAP Chart (Harga vs VWAP)")
-
 selected_stock = st.selectbox("Pilih saham untuk lihat VWAP & RSI", df["Stock Code"].unique())
-vwap_data = df[df["Stock Code"] == selected_stock].copy()
-vwap_data.reset_index(drop=True, inplace=True)
-
-fig_vwap = px.line(vwap_data, y=["Close", "VWAP"],
-                   labels={"value": "Harga", "index": "Hari ke-"},
-                   title=f"{selected_stock} - Harga vs VWAP")
+vwap_data = df[df["Stock Code"] == selected_stock].copy().reset_index(drop=True)
+fig_vwap = px.line(vwap_data, y=["Close", "VWAP"], labels={"value": "Harga", "index": "Hari ke-"}, title=f"{selected_stock} - Harga vs VWAP")
 st.plotly_chart(fig_vwap, use_container_width=True)
 
-# RSI Chart
 st.subheader("📉 RSI (Relative Strength Index)")
-fig_rsi = px.line(vwap_data, y="RSI", labels={"value": "RSI", "index": "Hari ke-"},
-                  title=f"{selected_stock} - RSI 14 Hari")
+fig_rsi = px.line(vwap_data, y="RSI", labels={"value": "RSI", "index": "Hari ke-"}, title=f"{selected_stock} - RSI 14 Hari")
 st.plotly_chart(fig_rsi, use_container_width=True)
 
-# ⭐ Watchlist Saham
+# Watchlist
 st.subheader("⭐ Watchlist Saham")
 watchlist = st.multiselect("Pilih saham yang ingin dimonitor", df["Stock Code"].unique())
-
 if watchlist:
     filtered_watchlist = df[df["Stock Code"].isin(watchlist)]
-    st.dataframe(
-        filtered_watchlist[["Stock Code", "Close", "Volume", "Net Foreign", "VWAP", "RSI"]]
-        .sort_values(by="Net Foreign", ascending=False)
-    )
+    st.dataframe(filtered_watchlist[["Stock Code", "Close", "Volume", "Net Foreign", "VWAP", "RSI"]].sort_values(by="Net Foreign", ascending=False))
+    csv = filtered_watchlist.to_csv(index=False).encode('utf-8')
+    st.download_button("📂 Download Watchlist sebagai CSV", data=csv, file_name="watchlist.csv", mime="text/csv")
 else:
     st.info("Pilih minimal satu saham untuk menampilkan watchlist.")
 
-# 🔥 Heatmap Volume Spike
+# Heatmap Volume Spike
 st.subheader("🔥 Heatmap Volume Spike (Volume vs Rata-rata)")
-
-# Hitung rata-rata volume per saham
 avg_volume_per_stock = df.groupby("Stock Code")["Volume"].mean().reset_index()
 avg_volume_per_stock.columns = ["Stock Code", "Avg Volume"]
-
-# Gabungkan dengan data asli
 df_spike = pd.merge(df, avg_volume_per_stock, on="Stock Code")
 df_spike["Volume Spike Ratio"] = df_spike["Volume"] / df_spike["Avg Volume"]
-
-# Ambil top 20 saham dengan rasio spike tertinggi
 spike_top = df_spike.sort_values(by="Volume Spike Ratio", ascending=False).dropna().head(20)
-
-fig_spike = px.density_heatmap(
-    spike_top,
-    x="Stock Code",
-    y="Volume Spike Ratio",
-    z="Volume",
-    color_continuous_scale="Inferno",
-    title="Top 20 Saham dengan Volume Spike",
-)
-
+fig_spike = px.density_heatmap(spike_top, x="Stock Code", y="Volume Spike Ratio", z="Volume", color_continuous_scale="Inferno", title="Top 20 Saham dengan Volume Spike")
 st.plotly_chart(fig_spike, use_container_width=True)
+
+# Filter Tanggal
+st.subheader("⏰ Filter Tanggal")
+if "Date" in df.columns:
+    df["Date"] = pd.to_datetime(df["Date"], errors='coerce')
+    min_date, max_date = df["Date"].min(), df["Date"].max()
+    start_date, end_date = st.date_input("Pilih rentang tanggal", [min_date, max_date], min_value=min_date, max_value=max_date)
+    if start_date and end_date:
+        df_filtered = df[(df["Date"] >= pd.to_datetime(start_date)) & (df["Date"] <= pd.to_datetime(end_date))]
+        st.dataframe(df_filtered.head(50))
+    else:
+        st.warning("Rentang tanggal tidak valid.")
+else:
+    st.warning("Kolom 'Date' tidak ditemukan di data.")
