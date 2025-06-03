@@ -12,6 +12,10 @@ df = pd.read_csv(CSV_URL)
 # Hitung Net Foreign
 df["Net Foreign"] = df["Foreign Buy"] - df["Foreign Sell"]
 
+# Hitung VWAP
+df["Typical Price"] = (df["High"] + df["Low"] + df["Close"]) / 3
+df["VWAP"] = (df["Typical Price"] * df["Volume"]).cumsum() / df["Volume"].cumsum()
+
 st.title("📊 Dashboard Analisa Big Player (Bandarmologi)")
 
 # Top Net Buy
@@ -32,3 +36,13 @@ st.dataframe(accumulated[["Stock Code", "Volume", "Close", "Price Change %"]].so
 st.subheader("📦 Saham dengan Transaksi Non-Regular")
 non_reg = df[df["Non Regular Volume"] > 0]
 st.dataframe(non_reg[["Stock Code", "Non Regular Volume", "Non Regular Value"]].sort_values(by="Non Regular Value", ascending=False).head(10))
+
+# VWAP Chart
+st.subheader("📈 VWAP Chart (Harga vs VWAP)")
+
+# Dropdown untuk memilih saham
+selected_stock = st.selectbox("Pilih saham untuk lihat VWAP", df["Stock Code"].unique())
+
+# Filter data untuk saham terpilih
+vwap_data = df[df["Stock Code"] == selected_stock].copy()
+vwap
