@@ -16,6 +16,15 @@ df["Net Foreign"] = df["Foreign Buy"] - df["Foreign Sell"]
 df["Typical Price"] = (df["High"] + df["Low"] + df["Close"]) / 3
 df["VWAP"] = (df["Typical Price"] * df["Volume"]).cumsum() / df["Volume"].cumsum()
 
+# Hitung RSI
+delta = df["Close"].diff()
+gain = delta.where(delta > 0, 0)
+loss = -delta.where(delta < 0, 0)
+avg_gain = gain.rolling(window=14).mean()
+avg_loss = loss.rolling(window=14).mean()
+rs = avg_gain / avg_loss
+df["RSI"] = 100 - (100 / (1 + rs))
+
 st.title("📊 Dashboard Analisa Big Player (Bandarmologi)")
 
 # Top Net Buy
@@ -40,15 +49,17 @@ st.dataframe(non_reg[["Stock Code", "Non Regular Volume", "Non Regular Value"]].
 # VWAP Chart
 st.subheader("📈 VWAP Chart (Harga vs VWAP)")
 
-# Dropdown untuk memilih saham
-selected_stock = st.selectbox("Pilih saham untuk lihat VWAP", df["Stock Code"].unique())
-
-# Filter data untuk saham terpilih
+selected_stock = st.selectbox("Pilih saham untuk lihat VWAP & RSI", df["Stock Code"].unique())
 vwap_data = df[df["Stock Code"] == selected_stock].copy()
 vwap_data.reset_index(drop=True, inplace=True)
 
-# Tampilkan grafik VWAP vs Close
 fig_vwap = px.line(vwap_data, y=["Close", "VWAP"],
                    labels={"value": "Harga", "index": "Hari ke-"},
                    title=f"{selected_stock} - Harga vs VWAP")
 st.plotly_chart(fig_vwap, use_container_width=True)
+
+# RSI Chart
+st.subheader("📉 RSI (Relative Strength Index)")
+fig_rsi = px.line(vwap_data, y="RSI", labels={"value": "RSI", "index": "Hari ke-"},
+                  title=f"{selected_stock} - RSI 14 Hari")
+st.plotly_chart(fig_rsi, use_container_width=True)
