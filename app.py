@@ -76,3 +76,4 @@ if watchlist:
     )
 else:
     st.info("Pilih minimal satu saham untuk menampilkan watchlist.")
+
