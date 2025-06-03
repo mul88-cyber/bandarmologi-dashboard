@@ -45,4 +45,10 @@ selected_stock = st.selectbox("Pilih saham untuk lihat VWAP", df["Stock Code"].u
 
 # Filter data untuk saham terpilih
 vwap_data = df[df["Stock Code"] == selected_stock].copy()
-vwap
+vwap_data.reset_index(drop=True, inplace=True)
+
+# Tampilkan grafik VWAP vs Close
+fig_vwap = px.line(vwap_data, y=["Close", "VWAP"],
+                   labels={"value": "Harga", "index": "Hari ke-"},
+                   title=f"{selected_stock} - Harga vs VWAP")
+st.plotly_chart(fig_vwap, use_container_width=True)
