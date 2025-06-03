@@ -64,7 +64,7 @@ fig_rsi = px.line(vwap_data, y="RSI", labels={"value": "RSI", "index": "Hari ke-
                   title=f"{selected_stock} - RSI 14 Hari")
 st.plotly_chart(fig_rsi, use_container_width=True)
 
-# Watchlist Saham
+# ⭐ Watchlist Saham
 st.subheader("⭐ Watchlist Saham")
 watchlist = st.multiselect("Pilih saham yang ingin dimonitor", df["Stock Code"].unique())
 
