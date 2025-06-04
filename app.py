@@ -11,17 +11,27 @@ def load_data():
     CSV_URL = f"https://drive.google.com/uc?id={FILE_ID}"
     df = pd.read_csv(CSV_URL)
 
-    for col in df.columns:
-        if col.strip().lower() == "last trading date":
-            df.rename(columns={col: "Date"}, inplace=True)
-            df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True)
-            break
+    # Normalisasi nama kolom & parsing tanggal
+    df.columns = [c.strip() for c in df.columns]
+    if "Last Trading Date" in df.columns:
+        df.rename(columns={"Last Trading Date": "Date"}, inplace=True)
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True)
 
+    # Pastikan semua kolom numerik terkonversi
+    num_cols = ["Foreign Buy", "Foreign Sell", "High", "Low", "Close", "Open Price", "Previous", "Volume"]
+    for col in num_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df.dropna(subset=["Date", "Stock Code", "Close", "Volume", "Foreign Buy", "Foreign Sell", "Previous", "Open Price"], inplace=True)
     return df
 
 df = load_data()
+if df.empty:
+    st.error("Data gagal dimuat. Periksa file CSV di Google Drive.")
+    st.stop()
 
-# Hitung indikator
+# Hitung indikator teknikal
 df["Net Foreign"] = df["Foreign Buy"] - df["Foreign Sell"]
 df["Typical Price"] = (df["High"] + df["Low"] + df["Close"]) / 3
 df["VWAP"] = (df["Typical Price"] * df["Volume"]).cumsum() / df["Volume"].cumsum()
@@ -33,15 +43,16 @@ avg_loss = loss.rolling(window=14).mean()
 rs = avg_gain / avg_loss
 df["RSI"] = 100 - (100 / (1 + rs))
 df["Change"] = df["Close"] - df["Previous"]
-df["Change %"] = df["Change"] / df["Previous"] * 100
+df["Change %"] = df["Change"] / df["Previous"].replace(0, pd.NA) * 100
+df["Price Change %"] = (df["Close"] - df["Open Price"]) / df["Open Price"].replace(0, pd.NA) * 100
 
+# ---------------------
 st.title(":chart_with_upwards_trend: Dashboard Analisa Big Player (Bandarmologi)")
 
 # --- Top Net Buy ---
 st.header("🧲 Top Saham Net Buy Asing")
 now = df["Date"].max()
-options = ["All Time", "3 Bulan Terakhir", "1 Bulan Terakhir"]
-periode = st.selectbox("Pilih periode", options)
+periode = st.selectbox("Pilih periode", ["All Time", "3 Bulan Terakhir", "1 Bulan Terakhir"])
 if periode == "3 Bulan Terakhir":
     df_filtered = df[df["Date"] >= now - timedelta(days=90)]
 elif periode == "1 Bulan Terakhir":
@@ -59,9 +70,6 @@ top_buy = (
     })
     .reset_index()
 )
-top_buy["Net Foreign"] = pd.to_numeric(top_buy["Net Foreign"], errors="coerce")
-top_buy["Volume"] = pd.to_numeric(top_buy["Volume"], errors="coerce")
-top_buy["Close"] = pd.to_numeric(top_buy["Close"], errors="coerce")
 top_buy = top_buy.sort_values(by="Net Foreign", ascending=False).head(10)
 
 st.dataframe(top_buy.style.format({
@@ -74,7 +82,6 @@ st.plotly_chart(fig1, use_container_width=True)
 
 # --- Deteksi Akumulasi ---
 st.header("🔍 Deteksi Akumulasi (Volume Naik, Harga Sideways)")
-df["Price Change %"] = (df["Close"] - df["Open Price"]) / df["Open Price"] * 100
 akumulasi = df[(df["Volume"] > df["Volume"].rolling(5).mean()) & (df["Price Change %"].abs() < 2)]
 akumulasi_top = (
     akumulasi.groupby("Stock Code")
@@ -87,7 +94,7 @@ st.dataframe(akumulasi_top.style.format({"Volume": "{:,.0f}", "Price Change %": 
 fig_aku = px.bar(akumulasi_top, x="Stock Code", y="Volume", title="Top 10 Saham Akumulasi - Rata2 Volume Tinggi, Harga Sideways")
 st.plotly_chart(fig_aku, use_container_width=True)
 
-# --- Foreign Flow per Saham (Bulanan) ---
+# --- Foreign Flow ---
 st.header("🌍 Foreign Flow Harian per Saham")
 selected_ff = st.selectbox("Pilih saham untuk melihat foreign flow harian", df["Stock Code"].unique())
 unique_months = sorted(df["Date"].dt.to_period("M").unique(), reverse=True)
@@ -118,19 +125,21 @@ if watchlist:
 else:
     st.info("Pilih minimal satu saham untuk menampilkan watchlist.")
 
-# --- 🔔 Alert Harian ---
+# --- Alert Harian ---
 st.header("📢 Alert Harian (Volume, Net Foreign, Harga)")
 latest_date = df["Date"].max()
-latest_df = df[df["Date"] == latest_date]
-alerts = latest_df[(latest_df["Volume"] > latest_df["Volume"].median() * 2) |
-                   (latest_df["Net Foreign"].abs() > latest_df["Net Foreign"].median() * 2) |
-                   (latest_df["Change %"].abs() > 5)]
-
+latest_df = df[df["Date"] == latest_date].copy()
+latest_df.dropna(subset=["Volume", "Net Foreign", "Change %"], inplace=True)
+alerts = latest_df[
+    (latest_df["Volume"] > latest_df["Volume"].median() * 2) |
+    (latest_df["Net Foreign"].abs() > latest_df["Net Foreign"].median() * 2) |
+    (latest_df["Change %"].abs() > 5)
+]
 st.dataframe(alerts[["Date", "Stock Code", "Volume", "Net Foreign", "Change %"]].sort_values(by="Net Foreign", ascending=False).style.format({
     "Volume": "{:,.0f}", "Net Foreign": "{:,.0f}", "Change %": "{:.2f}%"
 }))
 
-# --- 🔁 Integrasi Multi Hari ---
+# --- Integrasi Multi Hari ---
 st.header("🔁 Integrasi Multi Hari (5 Hari Terakhir)")
 cutoff = df["Date"].max() - timedelta(days=5)
 multi_df = df[df["Date"] >= cutoff]
@@ -146,7 +155,6 @@ summary_multi = (
 summary_multi.columns = ["Stock Code", "Net Foreign Avg", "Volume Avg", "Close First", "Close Last"]
 summary_multi["Change 5D %"] = (summary_multi["Close Last"] - summary_multi["Close First"]) / summary_multi["Close First"] * 100
 summary_multi = summary_multi.sort_values(by="Net Foreign Avg", ascending=False).head(10)
-
 st.dataframe(summary_multi.style.format({
     "Net Foreign Avg": "{:,.0f}", "Volume Avg": "{:,.0f}", "Change 5D %": "{:.2f}%"
 }))
